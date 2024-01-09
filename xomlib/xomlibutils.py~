@@ -1,0 +1,41 @@
+import configparser
+import shlex
+import subprocess
+import os
+import sys
+import time
+import pandas as pd
+import glob
+import ast 
+import json
+
+import straxen
+import strax
+import cutax
+
+
+import xomlib.constant as constant
+import xomlib.dblib as dbl
+
+
+
+def connect_db(dbname):
+    db = dbl.Xomdb(dbname)
+    return db
+
+def connect_dbs(prefix=""):
+    list_of_db = constant.list_of_db
+    dbs = []
+    for dbname in list_of_db:
+        dbfullname = prefix + dbname
+        dbs.append(connect_db(dbfullname))
+    return dbs
+    
+            
+#def construct_filename(xomres):
+def construct_filename(meas_name, an_name,an_version,an_var, runid):
+    ''' 
+    construct the filename out of the basic information of the xomresult
+    '''
+    return meas_name + "_" + an_name + "_" + an_version + '_' + an_var + '_' + str(runid)  + '.json'  
+#  return xomres.measurement_name + "_" + xomres.analysis_name + "_" + xomres.analysis_version + '_' + xomres.variable_name + '_' + str(xomres.runid) + '.json'  

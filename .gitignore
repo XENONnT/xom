@@ -1,0 +1,9 @@
+*.json
+*.png
+
+/xomlib/info.py
+
+/analysis/*
+/output/*
+/logs/*
+*

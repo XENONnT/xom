@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+import os
+from argparse import ArgumentParser
+from socket import timeout
+#from utilix.config import Config
+from datetime import timezone, datetime, timedelta
+import sys
+import pprint 
+import numpy as np
+import time
+import configparser
+import shlex
+import subprocess
+from utilix import xent_collection
+
+
+cdir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../")
+sys.path.append(cdir + "/utils/")
+import constant
+import dblib as dbl
+import analysis as analysis
+
+try:
+    import utils.utils as utils
+except ModuleNotFoundError:
+    import utils as utils
+ 
+
+import logging
+
+from logging.handlers import TimedRotatingFileHandler
+logger = logging.getLogger('proc_compare')
+log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
+log_level = 10
+handler = TimedRotatingFileHandler(cdir+ '/logs/proc_compare.log', when="midnight", interval=1)
+logger.setLevel(log_level)
+formatter = logging.Formatter(log_format)
+handler.setFormatter(formatter)
+# add a suffix which you want
+handler.suffix = "%Y%m%d"
+# finally add handler to logger    
+logger.addHandler(handler)
+
+
+
+
+
+def main():
+
+    print()
+    print("--------------------------------------")
+    print("XOM BACKEND PROCESS COMPARE module    ")
+    print("--------------------------------------")
+    print()
+
+    parser = ArgumentParser("proc_compare")
+    parser.add_argument("--prefix",type=str, help="define the database name you want to write in, for instance test", default='test_')
+    parser.add_argument("--loglevel", type=str, help="Shows informations and statistics about the database", default='INFO')
+    args = parser.parse_args()
+    loglevel = args.loglevel
+    prefix = args.prefix
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(loglevel.upper())
+    # create formatter and add it to the handlers
+    formatterch = logging.Formatter('%(name)-20s - %(levelname)-5s - %(message)s')
+    ch.setFormatter(formatterch)
+    # add the handlers to the logger
+    logger.addHandler(ch)
+    
+    
+    [xomdb,xomdbtodo,xomdbdone,xomdbsubmitted] = utils.connect_dbs(prefix)
+    logger.info(">>> will work with XOM measurement names:")
+    logger.info(f"     for jobs to do :{xomdbtodo.measurement_name}")
+    logger.info(f"     for submitted jobs :{xomdbsubmitted.measurement_name}")
+    logger.info(f"     for done jobs :{xomdbdone.measurement_name}")
+    logger.info(f"     for data :{xomdb.measurement_name}")
+
+    #############################
+    ### sets up the xomconfig ###
+    #############################
+    xomconfig = utils.get_xom_config(constant.configname)
+    logger.info(f'xom folder  is set to {constant.xomfolder}')
+    logger.info(f'set up config with file {constant.configname}')
+    analysis_names = xomconfig.sections()
+    
+    ##############################################
+    ### filling a list with analysis instances ###
+    ##############################################
+    analysis_list = []
+    if analysis_list is None:
+        logger.warning("no analysis ")
+    for analysis_name in analysis_names:
+        an = analysis.Analysis(analysis_name, loglevel)
+        logger.info(f"analysis setup: {an.analysis_name}")
+        an.fill_from_config(xomconfig)
+        analysis_list.append(an)
+        # check if analysis exists in xom db
+        xomdb.get_last_runid_from_analysis(analysis_name,an.analysis_version)
+
+
+    stop_condition = 0
+
+    prev_last_run_xom = 0
+    prev_last_run_daq = 0 
+
+ 
+    ##############################
+    ### Starting the main loop ###
+    ##############################
+    coll = xent_collection()
+    count = 0
+    while(stop_condition<1):
+        if count>0:
+            utils.sleep(constant.exec_period, f' for the execution delay of {constant.exec_period} s, ')
+        count+=1
+        last_run_xom = int(xomdb.get_last_runid())
+        last_run_daq = coll.find({'end': {'$ne': None}}).sort("number",-1).limit(1)[0]["number"]
+        logger.debug(f"latest entry in DAQ = {last_run_daq}") 
+        logger.debug(f"latest entry in XOM DB = {last_run_xom}")  
+        if prev_last_run_daq==last_run_daq:
+            logger.info('no DAQ new run')
+            continue
+        if last_run_daq > prev_last_run_daq:
+            prev_last_run_daq  = last_run_daq
+            
+            # check if xom is up to date
+            for an in analysis_list:
+                # need to be already presnent in the data base
+                last_todo_xom = xomdbtodo.get_last_runid_from_analysis(an.analysis_name, an.analysis_version)
+                last_done_xom = xomdbdone.get_last_runid_from_analysis(an.analysis_name, an.analysis_version)
+                last_submitted_xom = xomdbsubmitted.get_last_runid_from_analysis(an.analysis_name, an.analysis_version)
+            
+                logger.debug(f"last_todo_xom = {last_todo_xom} last_submitted_xom = {last_submitted_xom} last_done_xom = {last_done_xom} and min_run = {an.min_run}")
+                last_xom = max([last_todo_xom,last_done_xom,last_submitted_xom,an.min_run])
+                max_run = min([an.max_run,last_run_daq]) if an.max_run else last_run_daq
+                if last_run_daq == last_xom:
+                    logger.info(f"nothing to write in todo dB, analysis {an.analysis_name} is up to date")
+                    continue
+                else:
+                #produce list of runs according the analysis:
+                    logger.info(f"producing the list of new runs from runid {last_xom } to runid {max_run}") 
+                an.produce_list_of_runs(last_xom, max_run, prefix)
+                
+ 
+if __name__ == "__main__":
+    main()
+
+
+
