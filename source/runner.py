@@ -166,7 +166,8 @@ class Runner:
 
     def submit_job(self, runid):
         sbatch_filename = self.base_file_name + "_" + str(runid)
-        code_folder = "cd " + tool_config['analysis_folder'] + ana_config.get(self.analysis.analysis_name,'folder') + " \n"            
+#        code_folder = "cd " + tool_config['analysis_folder'] + ana_config.get(self.analysis.analysis_name,'folder') + " \n"            
+        code_folder = "cd " +  ana_config.get(self.analysis.analysis_name,'folder') + " \n"            
         command = "python " +  ana_config.get(self.analysis.analysis_name,'command') 
         analysis_command = code_folder + command.replace('[run]',str(runid).zfill(6)) 
         result_folder = tool_config['result_folder']
@@ -250,11 +251,12 @@ class Runner:
             for variable_name in self.analysis.variable_list:
                 fname = xomlibutils.construct_filename(self.prefix + 'xomdata',self.analysis.analysis_name, self.analysis.analysis_version, variable_name,runid)
                 print("JSON file name: ", fname)
-                for tag in daq_tags:
+                sr_tag = "no_sr_tag" 
+                for tag in tags:
                     sr_tag = tag if '_sr' in tag else "no_sr_tag" 
                     
                 res_dict = xomutils.load_result_json(tool_config['result_folder'] + fname)
-                res_dict.update({'daq_comment': '_'.join(comments), 'daq_tags': tags,'container': utils.get_container(runid), 'run_mode':run_mode, 'sr_tag': sr_tag})
+                res_dict.update({'daq_comment': '_'.join(comments), 'daq_tags': tags,'container': xomutils.get_container(runid), 'run_mode':run_mode, 'sr_tag': sr_tag})
                 xom_res = xomlib.Xomresult(res_dict)                
                 xom_res.save()
         except Exception as error:
