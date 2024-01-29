@@ -192,11 +192,11 @@ def main():
                  }
         df_submitted = runner.get_list(xomdbsubmitted)
         logger.info(f"size of submitted for analysis {an.analysis_name}: {len(df_submitted)} entries")
-        now = datetime.datetime.now(pytz.timezone(tool_config['computing_timezone']))
         try:
             # check the status of the submitted entries:
             for index, row in df_submitted.iterrows():
                 logger.info(f"in SUBMITTED list, treating run ID: {row['runid']} for analysis {an.analysis_name}" )
+                now = datetime.datetime.now(pytz.timezone(tool_config['computing_timezone']))
                 base_dict.update({
                     'runid':row['runid'], 
                     'variable_name': row['variable_name'],
