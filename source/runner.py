@@ -133,7 +133,7 @@ class Runner:
                 is_stored = is_stored & st.is_stored(runid_str,data_type)
                 return is_stored
         else:
-             
+            print("toto not the same container ")
             command = "python " + cdir + "source/test_data.py " + runid_str + " --available " + " ".join(required_type)
             env_command = 'source /cvmfs/xenon.opensciencegrid.org/releases/nT/2023.07.2/setup.sh'
             allcommand = env_command + " " + command + '\n'

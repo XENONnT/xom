@@ -4,7 +4,7 @@
     "analysis_folder":"/home/gaior/codes/work/newxom/xom/",
     "job_folder": "/home/gaior/codes/work/newxom/xom/output/job_files/",
     "result_folder": "/home/gaior/codes/work/newxom/xom/output/result/",
-    "configname": "test_config.cfg",
+    "configname": "2024_01_01.cfg",
     "singularity_base": "singularity exec --bind /project/ --bind /project2/ --bind /scratch/midway2/gaior --bind /dali /project2/lgrandi/xenonnt/singularity-images/",
     "computing_timezone": "America/Chicago",
     "ndays_before_removal": 2,
@@ -26,7 +26,7 @@
             "from": 57692,
             "to": 0
         },
-        "xenonnt-2023.07.2.simg": {
+        "xenonnt-2023.07.1.simg": {
             "from": 53107,
             "to": 57693
         },
