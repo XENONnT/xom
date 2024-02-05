@@ -135,8 +135,8 @@ def main():
             
         todo = runner.get_list(xomdbtodo)
         logger.info(f"size of todo for analysis {an.analysis_name}: {len(todo)} entries")
-        try:
-            for index, row in todo[:100].iterrows(): # treating the first 5 entries then going to the next analysis (important in case of production mostly)
+        for index, row in todo[:20].iterrows(): # treating the first 5 entries then going to the next analysis (important in case of production mostly)
+            try:
                 base_dict.update({
                     'runid':row['runid'], 
                     'variable_name': row['variable_name'],
@@ -175,7 +175,7 @@ def main():
                         logger.info(f">>> run ID: {runid} is older than {ndays_before_removal} days, todo entry was removed for analysis {an.analysis_name}" )
                             
                             
-        except Exception as error:
+            except Exception as error:
                 # handle the exception
                 logger.warning(f"An exception occurred in the TODO part: {error}")
         
@@ -210,9 +210,9 @@ def main():
                     logger.info(f"SUCCESS of JOB for Analysis {row['analysis_name']} and RUNID {row['runid']}")
                     done_dict['tag'] = 'done'
                     done_result = xomlib.Xomresult(done_dict) 
-                    done_result.save()
                     runner.save_data_in_db(row['runid'])
                     xomdbsubmitted.delete_record(row)                    
+                    done_result.save()
                 elif runner.is_failure(row['runid']):
                     logger.info(f"FAILURE of JOB for Analysis {row['analysis_name']} and RUNID {row['runid']}")                    
                     done_dict['tag'] = 'done_failed'

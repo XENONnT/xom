@@ -154,14 +154,15 @@ class Analysis:
             max_run_query = {"number": {"$lte": max_run}}
  
         finished_run_query =  {'end': {'$ne': None}}
+        available_run_query =  {'status': 'transferred'}
 
-        and_query = exclude_tags_query + detector_query + run_mode_query + [min_run_query, max_run_query] + [finished_run_query]
+        and_query = exclude_tags_query + detector_query + run_mode_query + [min_run_query, max_run_query] + [finished_run_query] + [available_run_query]
         or_query = include_tags_query
 #        self.logger.debug(f"AND query for the DAQ DB {and_query}, OR query :{or_query}")
         coll_list = list(coll.find({"$and" : and_query,"$or": or_query } ))
         
         valid_runs = []
-
+        
         [valid_runs.append(x['number']) for x in coll_list]
         return valid_runs
 

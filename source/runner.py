@@ -253,7 +253,8 @@ class Runner:
                 print("JSON file name: ", fname)
                 sr_tag = "no_sr_tag" 
                 for tag in tags:
-                    sr_tag = tag if '_sr' in tag else "no_sr_tag" 
+                    if '_sr' in tag:
+                        sr_tag = tag 
                     
                 res_dict = xomutils.load_result_json(tool_config['result_folder'] + fname)
                 res_dict.update({'daq_comment': '_'.join(comments), 'daq_tags': tags,'container': xomutils.get_container(runid), 'run_mode':run_mode, 'sr_tag': sr_tag})
