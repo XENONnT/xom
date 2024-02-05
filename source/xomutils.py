@@ -128,7 +128,7 @@ def df_to_dict(dfrow):
     
     
     #                            '|> keep(columns: ["_start","_stop","_time","_measurement","_value","variable_value", "variable_error","analysis_name","analysis_version","runid","container"])')
-
+    
 def search_in_file(filename, to_search):
     """ assess if the string 'to_search' is in 'filename'
     """

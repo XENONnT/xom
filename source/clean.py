@@ -21,19 +21,30 @@ def main():
     print()
 
     parser = ArgumentParser("clean")
-    parser.add_argument("--prefix",type=str, help="define the database name you want to write in, for instance test", default='')
+    parser.add_argument("--config",type=str, help="name of the config file", default='tool_config.json')
     args = parser.parse_args()
-    prefix = args.prefix
+    config_file = args.config
+    config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
+    tool_config = xomutils.read_json(config_dir + config_file)
+    prefix =tool_config['prefix']
+    if 'prod' in prefix:
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("BEWARE: You are asking to clean the production data bases ")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        user_input = input("Do you want to continue? (yes/no): ")                                                                                                                        
+        if user_input.lower() == "yes":
+            print("Continuing...")
+        else:
+            print("Exiting...")
+            sys.exit()
     [xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck] = xomlibutils.connect_dbs(prefix)
-    
+
     xomdb.delete()
     xomdbtodo.delete()
     xomdbdone.delete()
     xomdbsubmitted.delete()
     xomdbtocheck.delete()
 
-    config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
-    tool_config = xomutils.read_json(config_dir + 'tool_config.json')
     
     # here erase the job files
     toberemoved = tool_config['job_folder']

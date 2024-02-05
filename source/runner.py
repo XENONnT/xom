@@ -54,23 +54,13 @@ logger.addHandler(fh)
 logger.addHandler(ch)
 
 
-config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
-tool_config = xomutils.read_json(config_dir + 'tool_config.json')
-#############################
-### sets up the xomconfig ###
-#############################
-ana_config = xomutils.get_xom_config(tool_config['configname'])
-analysis_names = ana_config.sections()
-
-
-
 class Runner:
-    def __init__(self, analysis, prefix):
+    def __init__(self, analysis, tool_config):
         self.analysis = analysis
-        self.prefix = prefix
-        self.base_file_name = tool_config['job_folder'] + self.prefix + self.analysis.analysis_name 
+        self.prefix = tool_config['prefix']
+        self.tool_config = tool_config
+        self.base_file_name = self.tool_config['job_folder'] + self.prefix + self.analysis.analysis_name 
         self.analysis.print_config()
-
 
         self.logger = logging.getLogger(self.__class__.__module__ + '.' + self.__class__.__name__)
         self.logger.debug(f"creating instance of {self.__class__}")
@@ -79,6 +69,7 @@ class Runner:
         self.logger.debug("debug level")
         self.logger.info("info level")
         self.logger.warning("warning level")
+
 
     def make_todo_list(self, dbs):
         '''
@@ -94,6 +85,7 @@ class Runner:
             tot_list = np.append(tot_list, db.get_runid_list(self.analysis.analysis_name, self.analysis.analysis_version))
         unique_list = np.unique(tot_list)
         max_run = self.analysis.max_run if self.analysis.max_run else last_run_daq
+
         # check the daq runs within the limits given in the config file (min_run, max_run)                
         daq_runs = self.analysis.get_valid_runs(self.analysis.min_run, max_run)
         treated_runs = unique_list[ (unique_list >= self.analysis.min_run) & (unique_list <= max_run) ]
@@ -113,98 +105,78 @@ class Runner:
         ----- parameters-----:
         runid:     runid int
         
-        
-        required_type: list of required data types
-        container:     name of the container for this runid 
-        
         """
-        required_type = xomutils.get_from_config(ana_config, self.analysis.analysis_name, 'available_type')
+        required_type = self.analysis.available_type_list
         if not required_type:
             return True
         runid_str = str(runid).zfill(6)
         container = xomutils.get_container(runid)
         # >> if the environment matches the container the data should be treated in, then we can just test with st.is_stored
-        # >> otherwise, we need to submit a job in a different container to test the existence of the data.
+        # >> otherwise raise an exception, the xom should be restarted with the correct container for these runs.
         if xomutils.get_container_from_env() == container:
+            is_stored = True
             print("same container and environ,enmt", container)
             # XOM standard way to load context for data availability consistency
-            is_stored = True
             for data_type in required_type:
                 is_stored = is_stored & st.is_stored(runid_str,data_type)
                 return is_stored
         else:
-            print("toto not the same container ")
-            command = "python " + cdir + "source/test_data.py " + runid_str + " --available " + " ".join(required_type)
-            env_command = 'source /cvmfs/xenon.opensciencegrid.org/releases/nT/2023.07.2/setup.sh'
-            allcommand = env_command + " " + command + '\n'
-#            allcommand = tool_config['singularity_base']+ container + " " + command + '\n'
-            execcommand = shlex.split(allcommand)
-            process = subprocess.Popen(execcommand,
-                                       stdin=subprocess.PIPE,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       universal_newlines=True)
-            try:
-                outs, errs = process.communicate(timeout=60)
-
-                if "data_is_available" in outs:
-                    print('data available ! ')  
-                    return True
-                else:
-                    print('not availbale !!!')
-#              return True if "data_is_available" in outs else False
-            except TimeoutExpired:
-                print('tiomeoput !!!!!!!!! ')
-                process.kill()
-                outs, errs = process.communicate()
-                self.logger.error("test data was killed after 60 seconds with errs {errs}")
-                return False
+            is_stored = False
+            raise Exception("the container XOM is run into DOES NOT MATCH the expected one from the data")
         
     def get_list(self, dbtolist):        
+        '''
+        return a list from a data base for a specific analysis
+        '''
         df = dbtolist.df_query_analysis(self.analysis.analysis_name)
         return df
 
     def submit_job(self, runid):
+        '''
+        wrapper around the utilix submit_job method. 
+        create the 
+        '''
         sbatch_filename = self.base_file_name + "_" + str(runid)
-#        code_folder = "cd " + tool_config['analysis_folder'] + ana_config.get(self.analysis.analysis_name,'folder') + " \n"            
-        code_folder = "cd " +  ana_config.get(self.analysis.analysis_name,'folder') + " \n"            
-        command = "python " +  ana_config.get(self.analysis.analysis_name,'command') 
+        code_folder = "cd " + self.analysis.folder + " \n"            
+        command = "python " +  self.analysis.command 
         analysis_command = code_folder + command.replace('[run]',str(runid).zfill(6)) 
-        result_folder = tool_config['result_folder']
+        result_folder = self.tool_config['result_folder']
         analysis_command += " " + result_folder
-        if self.prefix:
-            analysis_command += (" --prefix "+ self.prefix)
-            if ana_config.has_option(self.analysis.analysis_name,'mem_per_cpu'):
-                mem_per_cpu = int(ana_config.get(self.analysis.analysis_name,'mem_per_cpu'))
-            else:
-                mem_per_cpu = 4000
-                log_filename = tool_config['job_folder'] + self.prefix + self.analysis.analysis_name + "_" + str(runid) +'.log'
+        analysis_command += (" --prefix "+ self.prefix)
+        
+        if self.analysis.mem_per_cpu:
+            mem_per_cpu = int(self.analysis.mem_per_cpu)
+        else:
+            mem_per_cpu = 4000
+        log_filename = self.tool_config['job_folder'] + self.prefix + self.analysis.analysis_name + "_" + str(runid) +'.log'
                 
-            print(f'data for run {runid} is available, will submit the job {sbatch_filename}')
-            #                logger.info(f'data for run {runid} is available, will submit the job {sbatch_filename}')
-            # utilix job submission:
-            submit_job(jobstring= analysis_command,
-                       log= self.get_logfile_name(runid),
-                       partition = tool_config['job_partition'],
-                       qos = tool_config['job_partition'],
-                       jobname = 'xom_job',
-                       sbatch_file = sbatch_filename,
-                       dry_run=False,
-                       mem_per_cpu=mem_per_cpu,
-                       container=xomutils.get_container(runid),
-                       cpus_per_task=1,
-                       hours=None,
-                       node=None,
-                       exclude_nodes=None,
-                   )
-            
-            self.logger.info(f"submitted JOB {sbatch_filename}")
+        print(f'data for run {runid} is available, will submit the job {sbatch_filename}')
+        # utilix job submission:
+        submit_job(jobstring= analysis_command,
+                   log= self.get_logfile_name(runid),
+                   partition = self.tool_config['job_partition'],
+                   qos = self.tool_config['job_partition'],
+                   jobname = 'xom_job',
+                   sbatch_file = sbatch_filename,
+                   dry_run=False,
+                   mem_per_cpu=mem_per_cpu,
+                   container=xomutils.get_container(runid),
+                   cpus_per_task=1,
+                   hours=None,
+                   node=None,
+                   exclude_nodes=None,
+               )
+        
+        self.logger.info(f"submitted JOB {sbatch_filename}")
 
     def get_logfile_name(self, runid):
         logfile_name = self.base_file_name + "_" + str(runid) + '.log'
         return logfile_name
 
     def is_success(self, runid):        
+        '''
+        test of log file: look for success message
+        '''
         success = False
         try: 
             filename = self.get_logfile_name(runid)
@@ -216,6 +188,9 @@ class Runner:
             return success
 
     def is_failure(self, runid):        
+        '''
+        test of log file: look for error message
+        '''
         failure = False
         try: 
             filename = self.get_logfile_name(runid)
@@ -226,6 +201,7 @@ class Runner:
             print("An exception occurred in is_failure:", error) 
             return failure
 
+
     def save_data_in_db(self, runid):
         ''' 
         add the DAQ comments, DAQ tags and run mode in the result dictionnary before saving it into the database
@@ -235,6 +211,8 @@ class Runner:
         cursor = coll.find(query, {'number': 1, 'mode': 1, 'tags.name':1, 'comments.comment':1})
         name_of_variable = 'number'
         daq_info = {}
+
+        # add the additional informatio: comment, tags, runmode
         try:
             comments = []
             tags = []
@@ -247,16 +225,17 @@ class Runner:
         except Exception as error:
             print('an execption occured in save data in db', error)
 
+        # look for specific Science Run tag, load the result from the JSON file and save the result in the database
         try:
             for variable_name in self.analysis.variable_list:
-                fname = xomlibutils.construct_filename(self.prefix + 'xomdata',self.analysis.analysis_name, self.analysis.analysis_version, variable_name,runid)
-                print("JSON file name: ", fname)
                 sr_tag = "no_sr_tag" 
                 for tag in tags:
                     if '_sr' in tag:
                         sr_tag = tag 
+                fname = xomlibutils.construct_filename(self.prefix + 'xomdata',self.analysis.analysis_name, self.analysis.analysis_version, variable_name,runid)
+                print("JSON file name: ", fname)
                     
-                res_dict = xomutils.load_result_json(tool_config['result_folder'] + fname)
+                res_dict = xomutils.load_result_json(self.tool_config['result_folder'] + fname)
                 res_dict.update({'daq_comment': '_'.join(comments), 'daq_tags': tags,'container': xomutils.get_container(runid), 'run_mode':run_mode, 'sr_tag': sr_tag})
                 xom_res = xomlib.Xomresult(res_dict)                
                 xom_res.save()
@@ -272,7 +251,7 @@ class Runner:
         cursor = coll.find(query, {'number': 1, 'rate': 1, 'start': 1, 'end':1})                      
         date = cursor[0].get('end')
         
-        now = datetime.datetime.now(pytz.timezone(tool_config['computing_timezone']))
+        now = datetime.datetime.now(pytz.timezone(self.tool_config['computing_timezone']))
 
         return (date - now).days
         

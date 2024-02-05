@@ -72,8 +72,6 @@ class Analysis:
          
     def fill_from_config(self, ana_config):
         self.analysis_version = ana_config.get(self.analysis_name,'analysis_version')
-#        containerlist = ana_config.get(self.analysis_name,'container')
-#        self.container_list = containerlist.split(',')
         if ana_config.has_option(self.analysis_name,'exclude_tags'):
             exclude_tags_list  = ana_config.get(self.analysis_name,'exclude_tags')
             self.exclude_tags_list = exclude_tags_list.split(',')
@@ -104,6 +102,8 @@ class Analysis:
             self.min_run = int(ana_config.get(self.analysis_name,'min_run'))
         if ana_config.has_option(self.analysis_name,'max_run'):
             self.max_run = int(ana_config.get(self.analysis_name,'max_run'))
+        if ana_config.has_option(self.analysis_name,'mem_per_cpu'):
+            self.mem_per_cpu = int(ana_config.get(self.analysis_name,'mem_per_cpu'))
 
     def print_config(self):
         self.logger.info(f"##### Analysis: {self.analysis_name} version {self.analysis_version} ##########")
