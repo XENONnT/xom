@@ -18,15 +18,27 @@ import xomlib.constant as constant
 import xomlib.dblib as dbl
 import xomlib.xomlibutils as xomlibutils
 
-def get_xom_config(configname='xomconfig.cfg'):
-    xomconfig = configparser.ConfigParser()
-    xomconfig.sections()
-    configfilename = configname
-    fname = constant.xomfolder + '/config/' + configfilename
-    if os.path.isfile(fname):
-        xomconfig.read(fname)
 
-    return xomconfig
+config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
+#tool_config = read_json(config_dir + 'tool_config.json')
+
+def get_analysis_config(filename):
+    analysis_config = configparser.ConfigParser()
+    analysis_config.sections()
+    print(filename)
+    fname = config_dir + filename
+
+    try:
+        if os.path.isfile(fname):
+            analysis_config.read(fname)
+            return analysis_config
+        else:
+            raise Exception(f"Config File {fname} do not exist")
+    except Exception as error:
+        # handle the exception
+        print(f"An exception occurred in xom config reading: {error}")
+
+
 
 def get_from_config(xomconfig, analysis_name, item_to_return):
     analysis_names = xomconfig.sections()
@@ -52,8 +64,6 @@ def read_json(filename):
         data = json.load(json_file)
     return data
 
-config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
-tool_config = read_json(config_dir + 'tool_config.json')
  
 def sleep(delay, message=""):
     for remaining in range(delay, 0, -1):
@@ -81,13 +91,12 @@ def empty_directory(path, prefix=None):
         remove_file(i)
 
 
-def get_container(run_id):
+def get_container(run_id, tool_config):
     '''retrieve the container corresponding to the run_id
 
     list of container is given in the wiki:
     https://xe1t-wiki.lngs.infn.it/doku.php?id=xenon:xenonnt:analysis:analysis_tools_team:midway3_rucio_guide#which_container_and_context_should_i_use
     '''
-
     for cont, run_id_lim in tool_config['container_dict'].items():
         if run_id >= run_id_lim['from']:
             if run_id_lim['to'] == 0:
@@ -200,3 +209,32 @@ def get_container_from_env():
     conda_env += '.simg'
     return conda_env
     
+
+import logging
+from datetime import datetime
+def get_logger(name, log_folder):
+    '''
+    set the common logger for all the code with the common properties.
+    
+    '''
+    now = datetime.now() # current date and time
+    date_time = now.strftime("%Y_%m_%d")
+    logger = logging.getLogger(name)
+    log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
+    log_level = 10
+    logger.setLevel(log_level)
+    formatter = logging.Formatter(log_format)
+    fh = logging.FileHandler(log_folder + 'xom_'+date_time+ '.log')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+    
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    # create formatter and add it to the handlers
+    ch.setFormatter(formatter)
+    
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    return logger

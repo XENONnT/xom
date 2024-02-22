@@ -7,37 +7,11 @@ import pytz
 import logging
 
 
-cdir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../")
 import xomlib.xomlibutils as xomlibutils
 import xomlib
 import xomutils as xomutils
 import analysis as analysis
 import runner as rn
-
-
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger('manager')
-log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
-log_level = 10
-logger.setLevel(log_level)
-formatter = logging.Formatter(log_format)
-
-# create file handler which logs even debug messages
-#fh = logging.FileHandler(os.path.join(logdir, 'acm.log'))
-fh = TimedRotatingFileHandler(cdir+ '/logs/xommanager.log', when="midnight", interval=1)
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formatter)
-# add a suffix which you want
-fh.suffix = "%Y%m%d"
-
-# create console handler with a higher log level
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-# create formatter and add it to the handlers
-ch.setFormatter(formatter)
-
-logger.addHandler(fh)
-logger.addHandler(ch)
 
 
 def main():
@@ -48,17 +22,14 @@ def main():
     print()
 
     parser = ArgumentParser("manager")
-    
-    parser.add_argument("--loglevel", type=str, help="Logging level", default='INFO')
-    parser.add_argument("--config",type=str, help="name of the config file", default='tool_config.json')
+    parser.add_argument("--config",type=str, help="path of the config file")
     args = parser.parse_args()
-    loglevel = args.loglevel
     config_file = args.config
 
-    config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
-    tool_config = xomutils.read_json(config_dir + config_file)
+    tool_config = xomutils.read_json(config_file)
     
     [xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck] = xomlibutils.connect_dbs(tool_config['prefix'])
+    logger = xomutils.get_logger('manager', tool_config['log_folder'])
     logger.info("##################################################")
     logger.info("########### starting XOM MANAGER #################") 
     logger.info("##################################################")
@@ -70,35 +41,34 @@ def main():
     logger.info(f"     for data :{xomdb.measurement_name}")
 
 
-    ana_config = xomutils.get_xom_config(tool_config['configname'])
+    ana_config = xomutils.get_analysis_config(tool_config['configname'])
     analysis_names = ana_config.sections()
 
     analysis_list = []
     runner_list = []
     for analysis_name in analysis_names:
-        an = analysis.Analysis(analysis_name, loglevel)
+        an = analysis.Analysis(analysis_name, tool_config)
         logger.info(f"analysis setup: {an.analysis_name}")
         an.fill_from_config(ana_config)
         analysis_list.append(an)
-
+        runner = rn.Runner(an,tool_config)
+        runner_list.append(runner)
     ###################################
     ### looping over the todo lists ###
     ###################################
     
     # query the todo list:
-    for an in analysis_list:
-        runner = rn.Runner(an,tool_config)
+    for an, runner in zip(analysis_list, runner_list):
         # dictionnary for the xom results
         base_dict = {'analysis_name': an.analysis_name,
                      'analysis_version': an.analysis_version, 
                  }
-
         # produce the todo list in the todo data base
         runner.make_todo_list([xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck])
-        
+     
         todo = runner.get_list(xomdbtodo)
         logger.info(f"size of todo for analysis {an.analysis_name}: {len(todo)} entries")
-        entries_to_treat = 20
+        entries_to_treat = 10
         for index, row in todo[:entries_to_treat].iterrows(): # treating the first 5 entries then going to the next analysis (important in case of production mostly)
             runid = row['runid']
             try:
@@ -115,16 +85,15 @@ def main():
                     
 
                 ############# data availability check ######################
-                if runner.is_available(runid): # >> data is available
+                if runner.is_available(int(runid)): # >> data is available
                     # construct the job submission:
-                    runner.submit_job(runid)                 
+                    runner.submit_job(int(runid))
                     
                     # built the dictionnary for the submitted entry
                     submitted_dict = base_dict                    
                     submitted_dict['measurement_name'] = xomdbsubmitted.measurement_name
-                    submitted_dict['tag'] ='submitted'
+                    submitted_dict['tag'] ='submitted_job'
                     submitted_result = xomlib.Xomresult(submitted_dict)                    
-                    
                     # save the submitted entry
                     submitted_result.save()
 
@@ -159,16 +128,17 @@ def main():
     ### looping over the submitted list ###
     #######################################
 
-    # query the submitted list:
+    #    query the submitted list:
     for an, runner in zip(analysis_list, runner_list):
         base_dict = {'analysis_name': an.analysis_name,
                      'analysis_version': an.analysis_version, 
                  }
         df_submitted = runner.get_list(xomdbsubmitted)
         logger.info(f"size of submitted for analysis {an.analysis_name}: {len(df_submitted)} entries")
-        try:
-            # check the status of the submitted entries:
-            for index, row in df_submitted.iterrows():
+        # check the status of the submitted entries:
+        entries_to_treat = 200
+        for index, row in df_submitted[:entries_to_treat].iterrows():
+            try:
                 logger.info(f"in SUBMITTED list, treating run ID: {row['runid']} for analysis {an.analysis_name}" )
                 now = datetime.datetime.now(pytz.timezone(tool_config['computing_timezone']))
                 base_dict.update({
@@ -197,16 +167,19 @@ def main():
                 else: # neither success of failure, job might be stuck somewhere for no know reason --> to be checked
                     print("Neither success or failure, job is maybe not finished")
                     if (row['_time'] - now).days < -tool_config['ndays_before_removal']:
-                        unfinished_dict = base_dict 
-                        unfinished_dict.update({'measurement_name': xomdbtocheck.measurement_name, 'tag':'unfinished_job'})
+                        unfinished_dict = base_dict
+                        unfinished_dict['measurement_name'] = xomdbtocheck.measurement_name
+                        unfinished_dict['tag'] = 'unfinished_job'
+                        
                         unfinished_result = xomlib.Xomresult(unfinished_dict)
                         unfinished_result.save()
+                        print(unfinished_dict)
                         xomdbsubmitted.delete_record(row)
                         logger.info(f"Job for Analysis {row['analysis_name']} and RUNID {row['runid']} is submitted longer than {tool_config['ndays_before_removal']} days, will be moved to tocheck data base")
                         
-        except Exception as error:
-            # handle the exception
-            logger.warning(f"An exception occurred in the SUBMITTED part: {error}") 
+            except Exception as error:
+                # handle the exception
+                logger.warning(f"An exception occurred in the SUBMITTED part: {error}") 
 
     logger.info("#########------- STATUS OF DB --------- ############" )
     for db in [xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck]: 

@@ -2,56 +2,25 @@
 
 import os
 import numpy as np
-import time
-import subprocess
-import shlex
 import sys
 import pytz
 cdir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../")
 import xomlib.xomlibutils as xomlibutils
-import xomlib.constant as constant
 import xomlib.dblib as dbl
 import xomlib
 import xomutils as xomutils
 
 import analysis as analysis
 
-
-import influxdb_client
-from influxdb_client.client.write_api import SYNCHRONOUS
-from argparse import ArgumentParser
-import glob
-import time
 import datetime
 
 from utilix.batchq import submit_job
-import logging
+
 sys.path.append('/home/gaior/codes/utilix/')
 from utilix import xent_collection
 coll = xent_collection()
-import straxen
 st = xomlibutils.load_straxen()            
  
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger(__name__)
-log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
-log_level = 10
-logger.setLevel(log_level)
-formatter = logging.Formatter(log_format)
-fh = TimedRotatingFileHandler(cdir+ '/logs/xommanager.log', when="midnight", interval=1)
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formatter)
-# add a suffix which you want
-fh.suffix = "%Y%m%d"
-
-# create console handler with a higher log level
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-# create formatter and add it to the handlers
-ch.setFormatter(formatter)
-
-logger.addHandler(fh)
-logger.addHandler(ch)
 
 
 class Runner:
@@ -61,8 +30,8 @@ class Runner:
         self.tool_config = tool_config
         self.base_file_name = self.tool_config['job_folder'] + self.prefix + self.analysis.analysis_name 
         self.analysis.print_config()
-
-        self.logger = logging.getLogger(self.__class__.__module__ + '.' + self.__class__.__name__)
+#        self.logger = xomutils.get_logger(self.__class__.__module__+ '.' + self.__class__.__name__ +'_'+ self.analysis.analysis_name,self.tool_config['log_folder'])        
+        self.logger = xomutils.get_logger('runner_'+ self.analysis.analysis_name,self.tool_config['log_folder'])        
         self.logger.debug(f"creating instance of {self.__class__}")
 
     def test_log(self):
@@ -83,16 +52,24 @@ class Runner:
         tot_list = np.array([])
         for db in dbs:
             tot_list = np.append(tot_list, db.get_runid_list(self.analysis.analysis_name, self.analysis.analysis_version))
-        unique_list = np.unique(tot_list)
-        max_run = self.analysis.max_run if self.analysis.max_run else last_run_daq
 
+        unique_list = np.unique(tot_list)
+#        self.logger.debug(f'unique list = {unique_list})'
+        max_run = self.analysis.max_run if self.analysis.max_run else int(last_run_daq)
+        
         # check the daq runs within the limits given in the config file (min_run, max_run)                
         daq_runs = self.analysis.get_valid_runs(self.analysis.min_run, max_run)
         treated_runs = unique_list[ (unique_list >= self.analysis.min_run) & (unique_list <= max_run) ]
-        
+#        self.logger.debug(f'treated_rune = {treated_runs}')
         # the run to be treated are the ones in the DAQ but not treated yet 
-        todo_runs = np.setxor1d(daq_runs, treated_runs) 
         
+        done_runs_bool = np.isin(daq_runs, treated_runs) 
+        daq_runs = np.asarray(daq_runs)
+        
+        todo_runs = daq_runs[np.invert(done_runs_bool)]
+        
+#        self.logger.debug(f'daq_runs : {daq_runs}')
+#        self.logger.debug(f'todo runes : {todo_runs}')
         for r in todo_runs:
             r = int(r)
             self.logger.info(f"producing the todo entry for ananlys {self.analysis.analysis_name} and run: {r}")
@@ -110,7 +87,7 @@ class Runner:
         if not required_type:
             return True
         runid_str = str(runid).zfill(6)
-        container = xomutils.get_container(runid)
+        container = xomutils.get_container(runid, self.tool_config)
         # >> if the environment matches the container the data should be treated in, then we can just test with st.is_stored
         # >> otherwise raise an exception, the xom should be restarted with the correct container for these runs.
         if xomutils.get_container_from_env() == container:
@@ -160,7 +137,7 @@ class Runner:
                    sbatch_file = sbatch_filename,
                    dry_run=False,
                    mem_per_cpu=mem_per_cpu,
-                   container=xomutils.get_container(runid),
+                   container=xomutils.get_container(runid, self.tool_config),
                    cpus_per_task=1,
                    hours=None,
                    node=None,
@@ -236,7 +213,7 @@ class Runner:
                 print("JSON file name: ", fname)
                     
                 res_dict = xomutils.load_result_json(self.tool_config['result_folder'] + fname)
-                res_dict.update({'daq_comment': '_'.join(comments), 'daq_tags': tags,'container': xomutils.get_container(runid), 'run_mode':run_mode, 'sr_tag': sr_tag})
+                res_dict.update({'daq_comment': '_'.join(comments), 'daq_tags': tags,'container': xomutils.get_container(runid, self.tool_config), 'run_mode':run_mode, 'sr_tag': sr_tag})
                 xom_res = xomlib.Xomresult(res_dict)                
                 xom_res.save()
         except Exception as error:
@@ -250,7 +227,7 @@ class Runner:
         query = {'number': runid}
         cursor = coll.find(query, {'number': 1, 'rate': 1, 'start': 1, 'end':1})                      
         date = cursor[0].get('end')
-        
+        date = pytz.timezone("UTC").localize(date)
         now = datetime.datetime.now(pytz.timezone(self.tool_config['computing_timezone']))
 
         return (date - now).days

@@ -9,10 +9,6 @@ import json
 from utilix import xent_collection
 coll = xent_collection()
 
-
-cdir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../")
-
-
 import xomlib
 import xomlib.dblib as dbl
 import xomlib.constant as constant
@@ -20,36 +16,12 @@ import xomlib.constant as constant
 import xomutils as xomutils
 
 from datetime import datetime
-import time
 
 
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger(__name__)
-log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
-log_level = 10
-logger.setLevel(log_level)
-formatter = logging.Formatter(log_format)
-fh = TimedRotatingFileHandler(cdir+ '/logs/xommanager.log', when="midnight", interval=1)
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formatter)
-# add a suffix which you want
-fh.suffix = "%Y%m%d"
-
-# create console handler with a higher log level
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-# create formatter and add it to the handlers
-ch.setFormatter(formatter)
-
-logger.addHandler(fh)
-logger.addHandler(ch)
-
-config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
-tool_config = xomutils.read_json(config_dir + 'tool_config.json')
- 
 class Analysis:
-    def __init__(self, name, loglevel="INFO"):
+    def __init__(self, name, tool_config):
         self.analysis_name = name
+        self.tool_config = tool_config        
         self.analysis_version = ""
         self.variable_list = []
         self.container_list = []
@@ -62,11 +34,10 @@ class Analysis:
         self.run_mode_list = []
         self.command = ""
         self.result = None
-        self.logger = logging.getLogger('manager.analysis.'+self.analysis_name)
+        self.logger = xomutils.get_logger('analysis.'+self.analysis_name, tool_config['log_folder'])
         self.min_run = None
         self.max_run = None
 
-        self.logger = logging.getLogger(self.__class__.__module__ + '.' + self.__class__.__name__)
         self.logger.debug(f"creating instance of {self.__class__}")
 
          
@@ -104,6 +75,8 @@ class Analysis:
             self.max_run = int(ana_config.get(self.analysis_name,'max_run'))
         if ana_config.has_option(self.analysis_name,'mem_per_cpu'):
             self.mem_per_cpu = int(ana_config.get(self.analysis_name,'mem_per_cpu'))
+        else:
+            self.mem_per_cpu = None
 
     def print_config(self):
         self.logger.info(f"##### Analysis: {self.analysis_name} version {self.analysis_version} ##########")
@@ -124,7 +97,7 @@ class Analysis:
             detector_query = [{}]
 
         # list of unused run modes:
-        excluded_run_modes = tool_config['excluded_run_modes']
+        excluded_run_modes = self.tool_config['excluded_run_modes']
         if self.run_mode_list:
             run_mode_query = [{"$or":[{"mode": i} for i in self.run_mode_list]}]
         else: 
@@ -142,10 +115,10 @@ class Analysis:
         
          
         if not self.min_run:
-            min_run_query = {"number":{"$gt": last_xom}}
+            min_run_query = {"number":{"$gte": last_xom}}
         else:            
             min_run = max(last_xom,self.min_run)            
-            min_run_query = {"number":{"$gt": min_run}}
+            min_run_query = {"number":{"$gte": min_run}}
 
         if not self.max_run:
             max_run_query = {"number": {"$lte": last_daq}}
@@ -169,7 +142,7 @@ class Analysis:
 
     def produce_todo_entry(self, r, prefix=""):
         measurement_name = prefix + 'xomtodo'
-        container = xomutils.get_container(r)
+        container = xomutils.get_container(r, self.tool_config)
         self.logger.info(f'adding entry in TODO list for runid {r} and container {container}')
         todo_dict = {
             'measurement_name':measurement_name,
@@ -177,7 +150,7 @@ class Analysis:
             'analysis_version': self.analysis_version,
             'variable_name': '_'.join(self.variable_list),
             'variable_value': 0,
-            'timestamp': datetime.now(pytz.timezone(tool_config['computing_timezone'])),
+            'timestamp': datetime.now(pytz.timezone(self.tool_config['computing_timezone'])),
             'runid': r,
             'container': container,
             'tag': 'todo'          

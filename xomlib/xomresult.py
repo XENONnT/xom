@@ -3,31 +3,17 @@ import os
 from doctest import run_docstring_examples
 import sys
 import json
-#from bson.json_util import dumps
-import xomlib.constant as constant
 import xomlib
 import datetime
 ## figure folder on the machine that host the database and display (grafana)
 #display_fig_folder = "/home/xom/data/v1.1/test/." 
-import logging
-
 
 import xomlib.dblib as dbl
 import xomlib.xomlibutils as xomlibutils
 
-ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.DEBUG)
-# create formatter and add it to the handlers
-formatterch = logging.Formatter('%(name)-20s - %(levelname)-5s - %(message)s')
-ch.setFormatter(formatterch)
-
-
-
 success_message = "SUCCESSWITHXOM"
 error_message = "ERRORWITHXOM"
 required_key = ['measurement_name', 'runid','analysis_name', 'analysis_version', 'variable_name']
-
-#required_key = ['measurement_name', 'runid',  'data_type']
  
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
@@ -99,7 +85,8 @@ class Xomresult:
                 "analysis_version": self.analysis_version, 
                 "variable_name": self.variable_name, 
                 "container": self.container,
-                "xom_version": self.xom_version}
+                "xom_version": self.xom_version,
+                "run_id": self.runid}
         if self.tag: tags.update({'tag':self.tag})
         if self.daq_tags:
             for i, t in enumerate(self.daq_tags) :
@@ -109,9 +96,10 @@ class Xomresult:
         if self.run_mode:
             tags.update({'run_mode':self.run_mode})
         fields = {}
-        fields["variable_value"] = self.variable_value
+        fields[self.variable_name] = self.variable_value
+#        fields['variable_value'] = self.variable_value
         fields["runid"] = self.runid
-        if self.daq_comment: fields['daq_comment'] = self.daq_comment
+        if self.daq_comment: tags['daq_comment'] = self.daq_comment
 #        if self.result_dict['data']: fields = self.data
         if self.data: fields.update(self.data)
         if self.figure_path: fields.update({'figure_path':self.figure_path})
@@ -142,11 +130,6 @@ class Xomresult:
             json.dump(self.result_dict, outfile)
 
             
-    # def get_json(self):
-    #     folder = constant.result_folder
-    #     fname = utils.construct_filename(self)
-    #     json_dict = utils.load_json(fname)
-        
 
 
     def save_in_db(self, record):

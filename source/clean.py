@@ -1,17 +1,9 @@
 #!/usr/bin/env python
 import os
 from argparse import ArgumentParser
-from socket import timeout
 import sys
-import configparser
-
-cdir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../")
-import xomlib.constant as constant
-import xomlib.dblib as dbl
-import analysis as analysis
 import xomlib.xomlibutils as xomlibutils
 import xomutils as xomutils
-
 
 def main():
     print()
@@ -21,12 +13,14 @@ def main():
     print()
 
     parser = ArgumentParser("clean")
-    parser.add_argument("--config",type=str, help="name of the config file", default='tool_config.json')
+    parser.add_argument("--prefix",type=str, help="name of the prefix")
+    parser.add_argument("--db",type=str, help="name of the DB to delete", choices=['data', 'todo', 'tocheck', 'submitted','done','all'], required=True)
+    parser.add_argument("--job_folder",type=str, help="path of the job files")
     args = parser.parse_args()
-    config_file = args.config
-    config_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)), "./../config/")
-    tool_config = xomutils.read_json(config_dir + config_file)
-    prefix =tool_config['prefix']
+    prefix = args.prefix
+    dbtodel = args.db
+    job_folder = args.job_folder
+
     if 'prod' in prefix:
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         print("BEWARE: You are asking to clean the production data bases ")
@@ -37,19 +31,20 @@ def main():
         else:
             print("Exiting...")
             sys.exit()
+            
+    print('deleting DB with prefix: ', prefix)
     [xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck] = xomlibutils.connect_dbs(prefix)
-
-    xomdb.delete()
-    xomdbtodo.delete()
-    xomdbdone.delete()
-    xomdbsubmitted.delete()
-    xomdbtocheck.delete()
+    for dbname, db in zip(['data','todo','done','submitted','tocheck'],[xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck]):
+        if dbtodel ==dbname or dbtodel == 'all':
+            print(f'deleting {dbname}')
+            db.delete()
 
     
-    # here erase the job files
-    toberemoved = tool_config['job_folder']
-    xomutils.empty_directory(toberemoved, prefix)
-    
-
+    # # here erase the job files in case we remove all the data bases
+    if dbtodel == 'all':
+        print(f'deleting the job files in folder {job_folder}')
+        xomutils.empty_directory(job_folder, prefix)
+        
+ 
 if __name__ == "__main__":
     main()
