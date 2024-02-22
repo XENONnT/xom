@@ -68,7 +68,7 @@ def main():
      
         todo = runner.get_list(xomdbtodo)
         logger.info(f"size of todo for analysis {an.analysis_name}: {len(todo)} entries")
-        entries_to_treat = 10
+        entries_to_treat = 20
         for index, row in todo[:entries_to_treat].iterrows(): # treating the first 5 entries then going to the next analysis (important in case of production mostly)
             runid = row['runid']
             try:

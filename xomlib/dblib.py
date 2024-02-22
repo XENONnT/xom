@@ -75,17 +75,11 @@ class Xomdb:
         
         return last_run_id
 
-    def get_runid_list(self, analysis_name,analysis_version="v0.0"):
+    def get_runid_list(self, analysis_name, analysis_version="v0.0", xom_version=None):
         '''will query the latest runid'''
         query_api = self.client.query_api()
-
-        df = query_api.query_data_frame('from(bucket:"xom") '
-                                '|> range(start: -100d) '
-                                '|> filter(fn: (r) => r._measurement == \"' + self.measurement_name + '\")'
-                                '|> filter(fn: (r) => r.analysis_name == \"'+ analysis_name + '\")'
-                                '|> filter(fn: (r) => r.analysis_version == \"'+ analysis_version + '\")'
-                                '|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") '
-                                '|> keep(columns: ["_start","_stop","_time","_measurement","_value","variable_value", "variable_error","analysis_name","analysis_version","runid","container"])')
+        df = self.df_query_analysis(analysis_name, analysis_version, xom_version)
+    
         if len(df) > 0:
             run_id_list = np.unique(df['runid'])
         else:
@@ -126,29 +120,21 @@ class Xomdb:
 
         return df
 
-    def df_query_analysis(self, analysis_name, analysis_version=None):
+    def df_query_analysis(self, analysis_name, analysis_version=None, xom_version=None):
         '''
         returns the data frame associated to the measurement and the analysis 
         (for all version)
         
         '''
+        query = 'from(bucket:"xom") |> range(start: -100d) |> filter(fn: (r) => r._measurement == \"' + self.measurement_name + '\")'
+        if xom_version == None: xom_version = self.get_latest_xom_version()
+        if xom_version: query+= '|> filter(fn: (r) => r.xom_version == \"' + xom_version + '\")'
+        query+= '|> filter(fn: (r) => r.analysis_name == \"'+ analysis_name + '\")'
+        if analysis_version: query+= '|> filter(fn: (r) => r.analysis_version == \"'+ analysis_version + '\")'
+        query += '|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") '
+        query += '|> keep(columns: ["_start","_stop","_time","_measurement","_value","variable_name","variable_value", "variable_error","analysis_name","analysis_version","runid","container"])'
         query_api = self.client.query_api()
-        if analysis_version:
-            df = query_api.query_data_frame('from(bucket:"xom") '
-                                            '|> range(start: -100d) '
-                                            '|> filter(fn: (r) => r._measurement == \"' + self.measurement_name + '\")'
-                                            '|> filter(fn: (r) => r.analysis_name == \"'+ analysis_name + '\")'
-                                            '|> filter(fn: (r) => r.analysis_version == \"'+ analysis_version + '\")'
-                                            '|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") '
-                                            '|> keep(columns: ["_start","_stop","_time","_measurement","_value","variable_name","variable_value", "variable_error","analysis_name","analysis_version","runid","container"])')
-        else:
-            df = query_api.query_data_frame('from(bucket:"xom") '
-                                            '|> range(start: -100d) '
-                                            '|> filter(fn: (r) => r._measurement == \"' + self.measurement_name + '\")'
-                                            '|> filter(fn: (r) => r.analysis_name == \"'+ analysis_name + '\")'
-                                            '|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") '
-                                            '|> keep(columns: ["_start","_stop","_time","_measurement","_value","variable_name","variable_value", "variable_error","analysis_name","analysis_version","runid","container"])')
-            
+        df = query_api.query_data_frame(query)
 
         return df
         
@@ -169,17 +155,31 @@ class Xomdb:
         delete_api.delete(start, stop,'_measurement=\"' + self.measurement_name + '\"', bucket='xom')
 
     
-    def delete_runid(self, analysis_name,analysis_version, runid):
+    def delete_runid(self, analysis_name, analysis_version,  runid,  xom_version=None):
         ''' 
         delete the records of one specific analysis for a given runid
         '''
         query_api = self.client.query_api()
 
-        df = self.df_query_analysis(analysis_name, analysis_version)
+        df = self.df_query_analysis(analysis_name, analysis_version, xom_version)
 
         df = df.query("runid ==" + str(runid))
         for index, row  in df.iterrows():
             print('>>>>>>>>> deleting :')
             print(row)
             self.delete_record(row)
-         
+            
+    def get_latest_xom_version(self):
+        query_api = self.client.query_api()
+        print("self.measurement_name = ",  self.measurement_name)
+        df = query_api.query_data_frame('from(bucket:"xom") '
+                                        '|> range(start: -100d) '
+                                        '|> filter(fn: (r) => r._measurement == \"' + self.measurement_name + '\")'
+                                        '|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") '
+                                        '|> keep(columns: ["_start","_stop","_time","_measurement","_value","xom_version"])')
+        if df.size:
+            latest_xom_version = df['xom_version'].max()
+            return latest_xom_version
+        else: 
+            pass
+        
