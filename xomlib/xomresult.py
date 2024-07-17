@@ -1,13 +1,35 @@
-#needed for xom_saver:
+'''
+#########################
+####### XOMRESULT #######
+#########################
+Dedicated Object to contain the information of the entries of the XOM database.
+It can be an entry of TODO, SUBMITTED, TOCHECK, DONE, or DATA db.
+Some items of the object will be shared, e.g. analysis name, analysis version etc
+Some items will differ e.g. variable_value
+
+This has to be loaded in the analyses: for instance
+ ----------------------- example --------------------
+base_dict = {'measurement_name':prod_xomdata,
+             'analysis_name':  analysis_toto,
+             'analysis_version': variabl_toto,
+             'runid': int(055555),
+             'timestamp':t_init,
+             }
+if lineage: base_dict.update({'lineage':lineage})
+result_dict = base_dict
+result_dict.update({'variable_name': name, 'variable_value': param_value})
+xomresult = xomlib.Xomresult(result_dict)
+xomresult.write_json(data_folder)
+ ----------------end of example --------------------
+
+'''
 import os
-from doctest import run_docstring_examples
 import sys
 import json
 import xomlib
 import datetime
-## figure folder on the machine that host the database and display (grafana)
-#display_fig_folder = "/home/xom/data/v1.1/test/." 
 
+import xomlib
 import xomlib.dblib as dbl
 import xomlib.xomlibutils as xomlibutils
 
@@ -22,6 +44,8 @@ def json_serial(obj):
         return obj.isoformat()
     else:
         return obj
+
+
             
 class Xomresult:
     def __init__(self, result_dict):

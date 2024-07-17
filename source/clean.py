@@ -3,7 +3,6 @@ import os
 from argparse import ArgumentParser
 import sys
 import xomlib.xomlibutils as xomlibutils
-import xomutils as xomutils
 
 def main():
     print()
@@ -33,17 +32,20 @@ def main():
             sys.exit()
             
     print('deleting DB with prefix: ', prefix)
-    [xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck] = xomlibutils.connect_dbs(prefix)
-    for dbname, db in zip(['data','todo','done','submitted','tocheck'],[xomdb,xomdbtodo,xomdbdone,xomdbsubmitted,xomdbtocheck]):
-        if dbtodel ==dbname or dbtodel == 'all':
-            print(f'deleting {dbname}')
+    # connect to databases:
+    dbs = {}
+    for dbsuffix in ['todo','done','submitted','tocheck','data',]:
+        dbname = prefix + 'xom' + dbsuffix
+        if dbtodel ==dbsuffix or dbtodel == 'all':
+            print(f'deleting {dbname}')            
+            db = xomlibutils.connect_db(dbname)
             db.delete()
 
     
     # # here erase the job files in case we remove all the data bases
     if dbtodel == 'all':
         print(f'deleting the job files in folder {job_folder}')
-        xomutils.empty_directory(job_folder, prefix)
+        xomlibutils.empty_directory(job_folder, prefix)
         
  
 if __name__ == "__main__":

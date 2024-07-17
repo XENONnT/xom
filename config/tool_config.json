@@ -1,10 +1,9 @@
 {
-    "version": "1.1",
-    "out_folder":"/home/gaior/",
-    "analysis_folder":"/home/gaior/codes/work/newxom/xom/",
-    "job_folder": "/home/gaior/codes/work/newxom/xom/output/job_files/",
-    "result_folder": "/home/gaior/codes/work/newxom/xom/output/result/",
-    "configname": "2024_01_01.cfg",
+    "prefix": "prod_",
+    "configname": "/home/gaior/codes/work/testxom/xom/config/prod_20240601.json",
+    "log_folder":"/home/gaior/codes/work/testxom/xom/logs/",
+    "job_folder": "/home/gaior/codes/work/testxom/xom/output/job_files/",
+    "result_folder": "/home/gaior/codes/work/testxom/xom/output/result/",
     "singularity_base": "singularity exec --bind /project/ --bind /project2/ --bind /scratch/midway2/gaior --bind /dali /project2/lgrandi/xenonnt/singularity-images/",
     "computing_timezone": "America/Chicago",
     "ndays_before_removal": 2,
@@ -22,9 +21,13 @@
         "tpc_rn_8pmts"
     ],
     "container_dict": {
+        "xenonnt-2024.06.1.simg": {
+            "from": 62802,
+            "to": 0
+        },
         "xenonnt-2024.01.1.simg": {
             "from": 57692,
-            "to": 0
+            "to": 62801
         },
         "xenonnt-2023.07.1.simg": {
             "from": 53107,
